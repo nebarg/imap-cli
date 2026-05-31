@@ -1,0 +1,15 @@
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Build output
+/imap-cli
+/dist/
+
+# OS / editor
+.DS_Store
+.idea/
+
+# Local Claude Code settings
+.claude/
