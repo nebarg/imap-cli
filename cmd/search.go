@@ -11,12 +11,11 @@ import (
 
 var searchFlags struct {
 	folder     string
-	from       string
-	to         string
-	subject    string
-	body       string
-	text       string
-	or         []string
+	from       []string
+	to         []string
+	subject    []string
+	body       []string
+	contains   []string
 	since      string
 	before     string
 	sinceHours int
@@ -35,17 +34,23 @@ var searchCmd = &cobra.Command{
 	Short: "Search messages and return JSON summaries (newest first)",
 	Long: `Search a folder using server-side IMAP criteria.
 
-Filters of different kinds are combined with AND. --from/--to/--subject match
-those headers; --text/--body match anywhere; --or is repeatable and matches if
-ANY of its terms appears (the terms are ORed together, then ANDed with the rest).
+Every filter is repeatable. Repeating the SAME filter ORs its values; DIFFERENT
+filters are ANDed together. So:
+  --from amazon --from ebay              -> from amazon OR from ebay
+  --from amazon --contains order         -> from amazon AND contains order
+  --from amazon --contains order --contains receipt
+                                         -> from amazon AND (order OR receipt)
+
+--from/--to/--subject match those headers; --contains matches any header or the
+body; --body matches the body only.
 
 Examples:
   imap-cli search --from alice@example.com --limit 20
   imap-cli search --subject invoice --since 2026-01-01
 
-  # Orders from Amazon in the last 24 hours (amazon anywhere in the From header):
-  imap-cli search --from amazon --since-hours 24 \
-      --or order --or receipt --or dispatched --or "order confirmation"`,
+  # Orders from Amazon (or eBay) in the last 24 hours:
+  imap-cli search --from amazon --from ebay --since-hours 24 \
+      --contains order --contains receipt --contains dispatched`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		p := mailbox.SearchParams{
 			Folder:      searchFlags.folder,
@@ -53,8 +58,7 @@ Examples:
 			To:          searchFlags.to,
 			Subject:     searchFlags.subject,
 			Body:        searchFlags.body,
-			Text:        searchFlags.text,
-			Or:          searchFlags.or,
+			Contains:    searchFlags.contains,
 			SinceHours:  searchFlags.sinceHours,
 			Limit:       searchFlags.limit,
 			Offset:      searchFlags.offset,
@@ -100,12 +104,11 @@ func parseDate(s string) (time.Time, error) {
 func init() {
 	f := searchCmd.Flags()
 	f.StringVar(&searchFlags.folder, "folder", "INBOX", "mailbox to search")
-	f.StringVar(&searchFlags.from, "from", "", "match the From header")
-	f.StringVar(&searchFlags.to, "to", "", "match the To header")
-	f.StringVar(&searchFlags.subject, "subject", "", "match the Subject header")
-	f.StringVar(&searchFlags.body, "body", "", "match text in the message body")
-	f.StringVar(&searchFlags.text, "text", "", "match text in any header or the body")
-	f.StringArrayVar(&searchFlags.or, "or", nil, "match if ANY of these terms appears in a header or body (repeatable)")
+	f.StringArrayVar(&searchFlags.from, "from", nil, "match the From header (repeatable; ORed)")
+	f.StringArrayVar(&searchFlags.to, "to", nil, "match the To header (repeatable; ORed)")
+	f.StringArrayVar(&searchFlags.subject, "subject", nil, "match the Subject header (repeatable; ORed)")
+	f.StringArrayVar(&searchFlags.body, "body", nil, "match text in the body (repeatable; ORed)")
+	f.StringArrayVar(&searchFlags.contains, "contains", nil, "match text in any header or the body (repeatable; ORed)")
 	f.StringVar(&searchFlags.since, "since", "", "messages on/after this date (YYYY-MM-DD)")
 	f.StringVar(&searchFlags.before, "before", "", "messages before this date (YYYY-MM-DD)")
 	f.IntVar(&searchFlags.sinceHours, "since-hours", 0, "only messages received within the last N hours (exact)")

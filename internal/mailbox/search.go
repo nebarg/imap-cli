@@ -9,14 +9,17 @@ import (
 )
 
 // SearchParams describes a server-side IMAP search.
+//
+// The text/header fields are slices: repeating a value ORs it within that
+// field, while different fields are ANDed together. So From=[amazon,ebay] and
+// Contains=[order] means (from amazon OR from ebay) AND contains order.
 type SearchParams struct {
 	Folder      string
-	From        string
-	To          string
-	Subject     string
-	Body        string
-	Text        string   // matches any header or the body
-	Or          []string // matches if ANY term appears in any header or body
+	From        []string // matches the From header (any of)
+	To          []string // matches the To header (any of)
+	Subject     []string // matches the Subject header (any of)
+	Body        []string // matches the body (any of)
+	Contains    []string // matches any header or the body (any of)
 	Since       time.Time
 	Before      time.Time
 	SinceHours  int   // >0: only messages received within the last N hours (exact)
@@ -156,24 +159,27 @@ func filterReceivedSince(summaries []MessageSummary, cutoff time.Time) []Message
 func buildCriteria(p SearchParams) *imap.SearchCriteria {
 	c := &imap.SearchCriteria{}
 
-	addHeader := func(key, val string) {
-		if val != "" {
-			c.Header = append(c.Header, imap.SearchCriteriaHeaderField{Key: key, Value: val})
+	// Each field's values are ORed together, then ANDed into the criteria.
+	andField := func(values []string, mk func(string) imap.SearchCriteria) {
+		if g := orField(values, mk); g != nil {
+			c.And(g)
 		}
 	}
-	addHeader("From", p.From)
-	addHeader("To", p.To)
-	addHeader("Subject", p.Subject)
+	header := func(key string) func(string) imap.SearchCriteria {
+		return func(v string) imap.SearchCriteria {
+			return imap.SearchCriteria{Header: []imap.SearchCriteriaHeaderField{{Key: key, Value: v}}}
+		}
+	}
+	andField(p.From, header("From"))
+	andField(p.To, header("To"))
+	andField(p.Subject, header("Subject"))
+	andField(p.Body, func(v string) imap.SearchCriteria {
+		return imap.SearchCriteria{Body: []string{v}}
+	})
+	andField(p.Contains, func(v string) imap.SearchCriteria {
+		return imap.SearchCriteria{Text: []string{v}}
+	})
 
-	if p.Body != "" {
-		c.Body = append(c.Body, p.Body)
-	}
-	if p.Text != "" {
-		c.Text = append(c.Text, p.Text)
-	}
-	if oc := orCriteria(p.Or); oc != nil {
-		c.And(oc)
-	}
 	if !p.Since.IsZero() {
 		c.Since = p.Since
 	}
@@ -197,23 +203,21 @@ func buildCriteria(p SearchParams) *imap.SearchCriteria {
 	return c
 }
 
-// orCriteria folds N free-text terms into a single criteria that matches when
-// ANY of them appears in any header or the body. IMAP's OR is binary, so the
-// terms are combined right-to-left into a nested OR expression.
-func orCriteria(terms []string) *imap.SearchCriteria {
-	term := func(t string) imap.SearchCriteria {
-		return imap.SearchCriteria{Text: []string{t}}
-	}
-	switch len(terms) {
+// orField folds N values for one field into a single criteria that matches when
+// ANY of them matches, using mk to build the per-value criteria. IMAP's OR is
+// binary, so values are combined right-to-left into a nested OR expression. A
+// single value yields a plain (un-ORed) criteria.
+func orField(values []string, mk func(string) imap.SearchCriteria) *imap.SearchCriteria {
+	switch len(values) {
 	case 0:
 		return nil
 	case 1:
-		c := term(terms[0])
+		c := mk(values[0])
 		return &c
 	}
-	acc := term(terms[len(terms)-1])
-	for i := len(terms) - 2; i >= 0; i-- {
-		acc = imap.SearchCriteria{Or: [][2]imap.SearchCriteria{{term(terms[i]), acc}}}
+	acc := mk(values[len(values)-1])
+	for i := len(values) - 2; i >= 0; i-- {
+		acc = imap.SearchCriteria{Or: [][2]imap.SearchCriteria{{mk(values[i]), acc}}}
 	}
 	return &acc
 }

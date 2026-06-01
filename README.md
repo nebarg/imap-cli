@@ -46,23 +46,32 @@ password won't work with IMAP when 2FA is on.
 ./imap-cli search --from alice@example.com --limit 20
 ./imap-cli search --subject invoice --since 2026-01-01 --before 2026-04-01
 ./imap-cli search --folder "[Gmail]/Sent Mail" --to bob@example.com --snippet
-./imap-cli search --text refund --unseen
+./imap-cli search --contains refund --unseen
 
-# Orders from Amazon in the last 24 hours:
-./imap-cli search --from amazon --since-hours 24 \
-    --or order --or receipt --or dispatched --or "order confirmation"
+# Orders from Amazon (or eBay) in the last 24 hours:
+./imap-cli search --from amazon --from ebay --since-hours 24 \
+    --contains order --contains receipt --contains dispatched
 ```
 
-Filters: `--from`, `--to`, `--subject`, `--body`, `--text` (any header or body),
-`--since`/`--before` (`YYYY-MM-DD`), `--seen`/`--unseen`, `--flagged`.
+Filters: `--from`, `--to`, `--subject` (those headers), `--contains` (any header
+or body), `--body` (body only), `--since`/`--before` (`YYYY-MM-DD`),
+`--seen`/`--unseen`, `--flagged`.
 Paging: `--limit` (default 50, `0` = no limit), `--offset`.
 `--snippet` adds a short body preview (fetches bodies, so it's slower).
 
-**Combining filters.** Filters of different kinds are ANDed together. `--or` is
-repeatable and matches if **any** of its terms appears in a header or body; the
-OR group is then ANDed with the other filters. So
-`--from amazon --or order --or receipt` means *from amazon AND (order OR
-receipt)*.
+**Combining filters — one rule.** Every text/header filter is repeatable.
+Repeating the **same** filter ORs its values; **different** filters are ANDed
+together. So:
+
+| Command | Meaning |
+|---|---|
+| `--from amazon --from ebay` | from amazon **OR** from ebay |
+| `--from amazon --contains order` | from amazon **AND** contains order |
+| `--from amazon --contains order --contains receipt` | from amazon **AND** (order **OR** receipt) |
+
+(One consequence: you can't require two substrings in the *same* field — repeating
+a filter ORs, it doesn't AND. Split the terms across `--subject`/`--contains`, or
+use `--body` + `--contains`, if you need that.)
 
 **Time windows.** `--since`/`--before` are date-granular (an IMAP limitation).
 For a precise rolling window use `--since-hours N`: it narrows the server-side

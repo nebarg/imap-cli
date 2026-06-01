@@ -3,22 +3,28 @@ package mailbox
 import (
 	"testing"
 	"time"
+
+	"github.com/emersion/go-imap/v2"
 )
 
-// TestOrCriteria checks the binary-OR folding for various term counts.
-func TestOrCriteria(t *testing.T) {
-	if got := orCriteria(nil); got != nil {
-		t.Fatalf("empty terms: want nil, got %+v", got)
+// TestOrField checks the binary-OR folding for various value counts.
+func TestOrField(t *testing.T) {
+	text := func(v string) imap.SearchCriteria {
+		return imap.SearchCriteria{Text: []string{v}}
 	}
 
-	// Single term: no OR, just a Text match.
-	one := orCriteria([]string{"order"})
+	if got := orField(nil, text); got != nil {
+		t.Fatalf("empty values: want nil, got %+v", got)
+	}
+
+	// Single value: no OR, just a plain match.
+	one := orField([]string{"order"}, text)
 	if one == nil || len(one.Text) != 1 || one.Text[0] != "order" || len(one.Or) != 0 {
-		t.Fatalf("single term not folded to plain Text: %+v", one)
+		t.Fatalf("single value not folded to plain criteria: %+v", one)
 	}
 
-	// Three terms: a -> OR(a, OR(b, c)).
-	three := orCriteria([]string{"a", "b", "c"})
+	// Three values: a -> OR(a, OR(b, c)).
+	three := orField([]string{"a", "b", "c"}, text)
 	if len(three.Or) != 1 {
 		t.Fatalf("want one top-level OR pair, got %d", len(three.Or))
 	}
@@ -35,18 +41,30 @@ func TestOrCriteria(t *testing.T) {
 	}
 }
 
-// TestBuildCriteriaCombinesFromAndOr verifies a From header AND an OR group
-// coexist (the "orders from amazon" case).
-func TestBuildCriteriaCombinesFromAndOr(t *testing.T) {
+// TestBuildCriteriaCombinesFields verifies that a single From header value and
+// a multi-value Contains group coexist as From AND (a OR b) — the "orders from
+// amazon" case.
+func TestBuildCriteriaCombinesFields(t *testing.T) {
 	c := buildCriteria(SearchParams{
-		From: "amazon",
-		Or:   []string{"order", "receipt"},
+		From:     []string{"amazon"},
+		Contains: []string{"order", "receipt"},
 	})
 	if len(c.Header) != 1 || c.Header[0].Key != "From" || c.Header[0].Value != "amazon" {
 		t.Fatalf("From header missing/incorrect: %+v", c.Header)
 	}
 	if len(c.Or) != 1 {
-		t.Fatalf("OR group should be ANDed into criteria, got %d Or pairs", len(c.Or))
+		t.Fatalf("Contains OR group should be ANDed into criteria, got %d Or pairs", len(c.Or))
+	}
+}
+
+// TestBuildCriteriaOrsRepeatedFrom verifies repeating --from ORs the senders.
+func TestBuildCriteriaOrsRepeatedFrom(t *testing.T) {
+	c := buildCriteria(SearchParams{From: []string{"amazon", "ebay"}})
+	if len(c.Or) != 1 {
+		t.Fatalf("two --from values should produce one OR pair, got %d", len(c.Or))
+	}
+	if len(c.Header) != 0 {
+		t.Fatalf("ORed From should live under Or, not Header: %+v", c.Header)
 	}
 }
 
@@ -57,7 +75,7 @@ func TestFilterReceivedSince(t *testing.T) {
 	in := []MessageSummary{
 		{UID: 1, Received: now.Add(-1 * time.Hour).Format(time.RFC3339)},  // keep
 		{UID: 2, Received: now.Add(-48 * time.Hour).Format(time.RFC3339)}, // drop
-		{UID: 3, Received: ""},                                            // keep (unknown)
+		{UID: 3, Received: ""}, // keep (unknown)
 	}
 	got := filterReceivedSince(in, cutoff)
 	if len(got) != 2 {
