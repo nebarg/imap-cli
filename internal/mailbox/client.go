@@ -56,8 +56,10 @@ func (c *Client) Close() error {
 	return c.imap.Close()
 }
 
-// Folders lists all mailboxes available to the account.
-func (c *Client) Folders() ([]Folder, error) {
+// Folders lists the account's mailboxes. Unselectable folders (structural
+// containers/placeholders that can't hold mail, e.g. Gmail's "[Gmail]") are
+// omitted unless includeUnselectable is true.
+func (c *Client) Folders(includeUnselectable bool) ([]Folder, error) {
 	mboxes, err := c.imap.List("", "*", nil).Collect()
 	if err != nil {
 		return nil, fmt.Errorf("listing mailboxes: %w", err)
@@ -65,10 +67,14 @@ func (c *Client) Folders() ([]Folder, error) {
 
 	folders := make([]Folder, 0, len(mboxes))
 	for _, m := range mboxes {
+		selectable := isSelectable(m.Attrs)
+		if !selectable && !includeUnselectable {
+			continue
+		}
 		folders = append(folders, Folder{
 			Name:       m.Mailbox,
 			Role:       folderRole(m.Mailbox, m.Attrs),
-			Selectable: isSelectable(m.Attrs),
+			Selectable: selectable,
 			Delimiter:  string(m.Delim),
 			Flags:      mailboxAttrs(m.Attrs),
 		})

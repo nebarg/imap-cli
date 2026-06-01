@@ -37,8 +37,15 @@ password won't work with IMAP when 2FA is on.
 ### `folders` — list mailboxes
 
 ```sh
-./imap-cli folders
+./imap-cli folders          # selectable folders only
+./imap-cli folders --all     # include unselectable container folders
 ```
+
+Each folder has a `name`, a normalized `role` (`inbox`, `sent`, `trash`,
+`drafts`, `junk`, `archive`, `all`, `flagged`, `important`, or `""`), a
+`selectable` flag, the hierarchy `delimiter`, and the raw IMAP `flags`. By
+default, unselectable structural containers (e.g. Gmail's `[Gmail]`) are hidden
+since they can't hold mail or be searched; `--all` shows them.
 
 ### `search` — find messages (newest first)
 
