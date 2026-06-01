@@ -10,7 +10,7 @@ import (
 )
 
 var searchFlags struct {
-	folder     string
+	folders    []string
 	from       []string
 	to         []string
 	subject    []string
@@ -44,16 +44,20 @@ filters are ANDed together. So:
 --from/--to/--subject match those headers; --contains matches any header or the
 body; --body matches the body only.
 
+--folder is also repeatable: each named mailbox is searched and the results are
+merged (ordered by received time, since UIDs aren't comparable across folders).
+
 Examples:
   imap-cli search --from alice@example.com --limit 20
   imap-cli search --subject invoice --since 2026-01-01
+  imap-cli search --folder INBOX --folder "[Gmail]/Sent Mail" --contains invoice
 
   # Orders from Amazon (or eBay) in the last 24 hours:
   imap-cli search --from amazon --from ebay --since-hours 24 \
       --contains order --contains receipt --contains dispatched`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		p := mailbox.SearchParams{
-			Folder:      searchFlags.folder,
+			Folders:     searchFlags.folders,
 			From:        searchFlags.from,
 			To:          searchFlags.to,
 			Subject:     searchFlags.subject,
@@ -103,7 +107,7 @@ func parseDate(s string) (time.Time, error) {
 
 func init() {
 	f := searchCmd.Flags()
-	f.StringVar(&searchFlags.folder, "folder", "INBOX", "mailbox to search")
+	f.StringArrayVar(&searchFlags.folders, "folder", nil, "mailbox to search; repeatable to search several, results merged (default INBOX)")
 	f.StringArrayVar(&searchFlags.from, "from", nil, "match the From header (repeatable; ORed)")
 	f.StringArrayVar(&searchFlags.to, "to", nil, "match the To header (repeatable; ORed)")
 	f.StringArrayVar(&searchFlags.subject, "subject", nil, "match the Subject header (repeatable; ORed)")

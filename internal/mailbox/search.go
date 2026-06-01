@@ -14,7 +14,7 @@ import (
 // field, while different fields are ANDed together. So From=[amazon,ebay] and
 // Contains=[order] means (from amazon OR from ebay) AND contains order.
 type SearchParams struct {
-	Folder      string
+	Folders     []string // mailboxes to search; results are merged (any of)
 	From        []string // matches the From header (any of)
 	To          []string // matches the To header (any of)
 	Subject     []string // matches the Subject header (any of)
@@ -32,14 +32,14 @@ type SearchParams struct {
 
 const snippetLen = 200
 
-// Search runs a read-only search and returns message summaries, newest first.
+// Search runs a read-only search across one or more folders and returns message
+// summaries newest-first. When a single folder is searched, results are ordered
+// by UID (descending). When several folders are merged, UIDs are not comparable
+// across mailboxes, so results are ordered by received time instead.
 func (c *Client) Search(p SearchParams) ([]MessageSummary, error) {
-	folder := p.Folder
-	if folder == "" {
-		folder = "INBOX"
-	}
-	if _, err := c.imap.Select(folder, &imap.SelectOptions{ReadOnly: true}).Wait(); err != nil {
-		return nil, fmt.Errorf("selecting %q: %w", folder, err)
+	folders := p.Folders
+	if len(folders) == 0 {
+		folders = []string{"INBOX"}
 	}
 
 	criteria := buildCriteria(p)
@@ -55,29 +55,75 @@ func (c *Client) Search(p SearchParams) ([]MessageSummary, error) {
 		}
 	}
 
+	// Without an exact cutoff we can bound each folder's fetch to the page we
+	// might return, instead of pulling every matching header.
+	maxFetch := 0
+	if cutoff.IsZero() && p.Limit > 0 {
+		maxFetch = p.Offset + p.Limit
+	}
+
+	var all []MessageSummary
+	for _, folder := range folders {
+		summaries, err := c.searchFolder(folder, criteria, cutoff, p.WithSnippet, maxFetch)
+		if err != nil {
+			return nil, err
+		}
+		all = append(all, summaries...)
+	}
+
+	// searchFolder already orders each folder's results newest-first by UID.
+	// Across folders that ordering is meaningless, so re-sort by received time.
+	if len(folders) > 1 {
+		sort.SliceStable(all, func(i, j int) bool {
+			return summaryTime(all[i]).After(summaryTime(all[j]))
+		})
+	}
+
+	return paginate(all, p.Offset, p.Limit), nil
+}
+
+// searchFolder selects one folder read-only, runs the search, and returns its
+// summaries newest-first by UID (cutoff-filtered when cutoff is non-zero). cap,
+// when > 0, limits how many of the newest matches are fetched.
+func (c *Client) searchFolder(folder string, criteria *imap.SearchCriteria, cutoff time.Time, withSnippet bool, maxFetch int) ([]MessageSummary, error) {
+	if _, err := c.imap.Select(folder, &imap.SelectOptions{ReadOnly: true}).Wait(); err != nil {
+		return nil, fmt.Errorf("selecting %q: %w", folder, err)
+	}
+
 	data, err := c.imap.UIDSearch(criteria, nil).Wait()
 	if err != nil {
-		return nil, fmt.Errorf("search failed: %w", err)
+		return nil, fmt.Errorf("search in %q failed: %w", folder, err)
 	}
 
 	uids := data.AllUIDs()
 	// Newest first: higher UIDs are more recent within a mailbox.
 	sort.Slice(uids, func(i, j int) bool { return uids[i] > uids[j] })
-
-	// Without an exact cutoff we can page at the UID level before fetching, so we
-	// only pull headers for the page we return. With a cutoff we must fetch the
-	// candidates' received times first, trim, then page.
-	if cutoff.IsZero() {
-		uids = paginate(uids, p.Offset, p.Limit)
-		return c.fetchSummaries(folder, uids, p.WithSnippet)
+	if maxFetch > 0 && len(uids) > maxFetch {
+		uids = uids[:maxFetch]
 	}
 
-	summaries, err := c.fetchSummaries(folder, uids, p.WithSnippet)
+	summaries, err := c.fetchSummaries(folder, uids, withSnippet)
 	if err != nil {
 		return nil, err
 	}
-	summaries = filterReceivedSince(summaries, cutoff)
-	return paginate(summaries, p.Offset, p.Limit), nil
+	if !cutoff.IsZero() {
+		summaries = filterReceivedSince(summaries, cutoff)
+	}
+	return summaries, nil
+}
+
+// summaryTime returns the best available timestamp for ordering: the server
+// received time, falling back to the sender's Date, then the zero time.
+func summaryTime(s MessageSummary) time.Time {
+	for _, v := range []string{s.Received, s.Date} {
+		if v == "" {
+			continue
+		}
+		if t, err := time.Parse(time.RFC3339, v); err == nil {
+			return t
+		}
+	}
+	return time.Time{}
 }
 
 // fetchSummaries fetches envelope/flags/size/received for the given UIDs and

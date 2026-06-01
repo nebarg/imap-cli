@@ -86,6 +86,39 @@ func TestFilterReceivedSince(t *testing.T) {
 	}
 }
 
+// TestSummaryTime checks the ordering key used when merging folders: received
+// time preferred, then Date, then zero.
+func TestSummaryTime(t *testing.T) {
+	rcv := "2026-05-30T10:00:00Z"
+	date := "2026-05-29T10:00:00Z"
+
+	if got := summaryTime(MessageSummary{Received: rcv, Date: date}); !got.Equal(mustTime(t, rcv)) {
+		t.Fatalf("received should win, got %v", got)
+	}
+	if got := summaryTime(MessageSummary{Date: date}); !got.Equal(mustTime(t, date)) {
+		t.Fatalf("should fall back to Date, got %v", got)
+	}
+	if got := summaryTime(MessageSummary{}); !got.IsZero() {
+		t.Fatalf("no timestamps should yield zero time, got %v", got)
+	}
+
+	// A newer received time must sort ahead of an older one.
+	newer := MessageSummary{Received: "2026-05-31T00:00:00Z"}
+	older := MessageSummary{Received: "2026-05-01T00:00:00Z"}
+	if !summaryTime(newer).After(summaryTime(older)) {
+		t.Fatal("newer received time should sort after-in-time (i.e. ahead when descending)")
+	}
+}
+
+func mustTime(t *testing.T, s string) time.Time {
+	t.Helper()
+	parsed, err := time.Parse(time.RFC3339, s)
+	if err != nil {
+		t.Fatalf("bad test time %q: %v", s, err)
+	}
+	return parsed
+}
+
 func TestPaginate(t *testing.T) {
 	items := []int{0, 1, 2, 3, 4}
 	if got := paginate(items, 1, 2); len(got) != 2 || got[0] != 1 || got[1] != 2 {

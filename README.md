@@ -56,6 +56,9 @@ password won't work with IMAP when 2FA is on.
 Filters: `--from`, `--to`, `--subject` (those headers), `--contains` (any header
 or body), `--body` (body only), `--since`/`--before` (`YYYY-MM-DD`),
 `--seen`/`--unseen`, `--flagged`.
+`--folder` is repeatable: each named mailbox is searched and the results are
+merged. (Across folders, results are ordered by received time rather than UID,
+since UIDs are only meaningful within a single mailbox.)
 Paging: `--limit` (default 50, `0` = no limit), `--offset`.
 `--snippet` adds a short body preview (fetches bodies, so it's slower).
 
