@@ -34,14 +34,8 @@ func (a Account) Addr() string {
 // falls back to the unprefixed default. This keeps single-account setups
 // trivial while leaving multi-account support a matter of configuration.
 func Load(envPath, account string) (Account, error) {
-	// Load .env if present. Missing file is not an error: real environment
-	// variables may supply everything.
-	if envPath != "" {
-		if _, err := os.Stat(envPath); err == nil {
-			if err := godotenv.Load(envPath); err != nil {
-				return Account{}, fmt.Errorf("loading %s: %w", envPath, err)
-			}
-		}
+	if err := loadDotEnv(envPath); err != nil {
+		return Account{}, err
 	}
 
 	get := func(key string) string {
@@ -97,4 +91,19 @@ func Load(envPath, account string) (Account, error) {
 	}
 
 	return acc, nil
+}
+
+// loadDotEnv loads variables from path into the environment. A missing file is
+// not an error: real environment variables may supply everything.
+func loadDotEnv(path string) error {
+	if path == "" {
+		return nil
+	}
+	if _, err := os.Stat(path); err != nil {
+		return nil // no file present; rely on the process environment
+	}
+	if err := godotenv.Load(path); err != nil {
+		return fmt.Errorf("loading %s: %w", path, err)
+	}
+	return nil
 }

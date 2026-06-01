@@ -3,6 +3,7 @@ package mailbox
 import (
 	"fmt"
 	"net"
+	"strings"
 	"time"
 
 	"github.com/emersion/go-imap/v2"
@@ -65,9 +66,11 @@ func (c *Client) Folders() ([]Folder, error) {
 	folders := make([]Folder, 0, len(mboxes))
 	for _, m := range mboxes {
 		folders = append(folders, Folder{
-			Name:      m.Mailbox,
-			Delimiter: string(m.Delim),
-			Flags:     mailboxAttrs(m.Attrs),
+			Name:       m.Mailbox,
+			Role:       folderRole(m.Mailbox, m.Attrs),
+			Selectable: isSelectable(m.Attrs),
+			Delimiter:  string(m.Delim),
+			Flags:      mailboxAttrs(m.Attrs),
 		})
 	}
 	return folders, nil
@@ -79,4 +82,41 @@ func mailboxAttrs(attrs []imap.MailboxAttr) []string {
 		out = append(out, string(a))
 	}
 	return out
+}
+
+// roleByAttr maps RFC 6154 special-use attributes to normalized role names.
+var roleByAttr = map[imap.MailboxAttr]string{
+	imap.MailboxAttrSent:      "sent",
+	imap.MailboxAttrDrafts:    "drafts",
+	imap.MailboxAttrTrash:     "trash",
+	imap.MailboxAttrJunk:      "junk",
+	imap.MailboxAttrArchive:   "archive",
+	imap.MailboxAttrAll:       "all",
+	imap.MailboxAttrFlagged:   "flagged",
+	imap.MailboxAttrImportant: "important",
+}
+
+// folderRole derives a provider-independent role from a mailbox's attributes.
+// INBOX has no special-use attribute, so it is matched by its reserved name.
+func folderRole(name string, attrs []imap.MailboxAttr) string {
+	if strings.EqualFold(name, "INBOX") {
+		return "inbox"
+	}
+	for _, a := range attrs {
+		if role, ok := roleByAttr[a]; ok {
+			return role
+		}
+	}
+	return ""
+}
+
+// isSelectable reports whether a folder can be opened. Container placeholders
+// carry \Noselect or \NonExistent.
+func isSelectable(attrs []imap.MailboxAttr) bool {
+	for _, a := range attrs {
+		if a == imap.MailboxAttrNoSelect || a == imap.MailboxAttrNonExistent {
+			return false
+		}
+	}
+	return true
 }

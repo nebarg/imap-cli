@@ -47,6 +47,10 @@ password won't work with IMAP when 2FA is on.
 ./imap-cli search --subject invoice --since 2026-01-01 --before 2026-04-01
 ./imap-cli search --folder "[Gmail]/Sent Mail" --to bob@example.com --snippet
 ./imap-cli search --text refund --unseen
+
+# Orders from Amazon in the last 24 hours:
+./imap-cli search --from amazon --since-hours 24 \
+    --or order --or receipt --or dispatched --or "order confirmation"
 ```
 
 Filters: `--from`, `--to`, `--subject`, `--body`, `--text` (any header or body),
@@ -54,8 +58,20 @@ Filters: `--from`, `--to`, `--subject`, `--body`, `--text` (any header or body),
 Paging: `--limit` (default 50, `0` = no limit), `--offset`.
 `--snippet` adds a short body preview (fetches bodies, so it's slower).
 
+**Combining filters.** Filters of different kinds are ANDed together. `--or` is
+repeatable and matches if **any** of its terms appears in a header or body; the
+OR group is then ANDed with the other filters. So
+`--from amazon --or order --or receipt` means *from amazon AND (order OR
+receipt)*.
+
+**Time windows.** `--since`/`--before` are date-granular (an IMAP limitation).
+For a precise rolling window use `--since-hours N`: it narrows the server-side
+scan to the relevant day(s), then trims to the exact cutoff using each message's
+server received time.
+
 Each result contains: `uid`, `folder`, `from`, `to`, `subject`, `date`
-(RFC 3339), `flags`, `seen`, `size`, and optionally `snippet`.
+(sender's Date header), `received` (server receipt time, RFC 3339), `flags`,
+`seen`, `size`, and optionally `snippet`.
 
 ### `read` — fetch one full message by UID
 
