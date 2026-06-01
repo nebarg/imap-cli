@@ -57,6 +57,27 @@ func TestBuildCriteriaCombinesFields(t *testing.T) {
 	}
 }
 
+// TestBuildCriteriaContainsMatch checks --contains-match any vs all.
+func TestBuildCriteriaContainsMatch(t *testing.T) {
+	// Default (any): two terms become an OR pair, not multiple TEXT keys.
+	any := buildCriteria(SearchParams{Contains: []string{"refund", "order"}})
+	if len(any.Or) != 1 {
+		t.Fatalf("match=any should OR the terms, got %d Or pairs", len(any.Or))
+	}
+	if len(any.Text) != 0 {
+		t.Fatalf("match=any should not produce ANDed TEXT keys, got %v", any.Text)
+	}
+
+	// All: two terms become two TEXT keys (ANDed by the server), no OR.
+	all := buildCriteria(SearchParams{Contains: []string{"refund", "order"}, ContainsAll: true})
+	if len(all.Or) != 0 {
+		t.Fatalf("match=all should not OR, got %d Or pairs", len(all.Or))
+	}
+	if len(all.Text) != 2 || all.Text[0] != "refund" || all.Text[1] != "order" {
+		t.Fatalf("match=all should AND both terms as TEXT keys, got %v", all.Text)
+	}
+}
+
 // TestBuildCriteriaOrsRepeatedFrom verifies repeating --from ORs the senders.
 func TestBuildCriteriaOrsRepeatedFrom(t *testing.T) {
 	c := buildCriteria(SearchParams{From: []string{"amazon", "ebay"}})

@@ -14,12 +14,16 @@ import (
 // field, while different fields are ANDed together. So From=[amazon,ebay] and
 // Contains=[order] means (from amazon OR from ebay) AND contains order.
 type SearchParams struct {
-	Folders     []string // mailboxes to search; results are merged (any of)
-	From        []string // matches the From header (any of)
-	To          []string // matches the To header (any of)
-	Subject     []string // matches the Subject header (any of)
-	Body        []string // matches the body (any of)
-	Contains    []string // matches any header or the body (any of)
+	Folders  []string // mailboxes to search; results are merged (any of)
+	From     []string // matches the From header (any of)
+	To       []string // matches the To header (any of)
+	Subject  []string // matches the Subject header (any of)
+	Body     []string // matches the body (any of)
+	Contains []string // matches any header or the body
+	// ContainsAll switches the Contains values from OR (match any, the default)
+	// to AND (a message must match every term). Mixing AND and OR in one query
+	// is intentionally not supported; run separate queries for that.
+	ContainsAll bool
 	Since       time.Time
 	Before      time.Time
 	SinceHours  int   // >0: only messages received within the last N hours (exact)
@@ -222,9 +226,15 @@ func buildCriteria(p SearchParams) *imap.SearchCriteria {
 	andField(p.Body, func(v string) imap.SearchCriteria {
 		return imap.SearchCriteria{Body: []string{v}}
 	})
-	andField(p.Contains, func(v string) imap.SearchCriteria {
-		return imap.SearchCriteria{Text: []string{v}}
-	})
+	if p.ContainsAll {
+		// Multiple TEXT keys are ANDed by the server, so a message must contain
+		// every term.
+		c.Text = append(c.Text, p.Contains...)
+	} else {
+		andField(p.Contains, func(v string) imap.SearchCriteria {
+			return imap.SearchCriteria{Text: []string{v}}
+		})
+	}
 
 	if !p.Since.IsZero() {
 		c.Since = p.Since

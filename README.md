@@ -72,9 +72,18 @@ together. So:
 | `--from amazon --contains order` | from amazon **AND** contains order |
 | `--from amazon --contains order --contains receipt` | from amazon **AND** (order **OR** receipt) |
 
-(One consequence: you can't require two substrings in the *same* field — repeating
-a filter ORs, it doesn't AND. Split the terms across `--subject`/`--contains`, or
-use `--body` + `--contains`, if you need that.)
+**Requiring multiple terms (AND).** Repeating a filter ORs by default. For
+`--contains`, you can flip that with `--contains-match all`, which requires
+*every* term:
+
+```sh
+# messages mentioning BOTH refund AND order, anywhere
+./imap-cli search --contains refund --contains order --contains-match all
+```
+
+A single query is either all-OR or all-AND — mixing the two (e.g.
+`(a OR b) AND c`) is intentionally unsupported to keep the flags simple. Run
+separate queries for that; it's cheap and an LLM can combine the results.
 
 **Time windows.** `--since`/`--before` are date-granular (an IMAP limitation).
 For a precise rolling window use `--since-hours N`: it narrows the server-side

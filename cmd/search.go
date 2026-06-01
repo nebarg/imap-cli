@@ -10,21 +10,22 @@ import (
 )
 
 var searchFlags struct {
-	folders    []string
-	from       []string
-	to         []string
-	subject    []string
-	body       []string
-	contains   []string
-	since      string
-	before     string
-	sinceHours int
-	seen       bool
-	unseen     bool
-	flagged    bool
-	limit      int
-	offset     int
-	snippet    bool
+	folders       []string
+	from          []string
+	to            []string
+	subject       []string
+	body          []string
+	contains      []string
+	containsMatch string
+	since         string
+	before        string
+	sinceHours    int
+	seen          bool
+	unseen        bool
+	flagged       bool
+	limit         int
+	offset        int
+	snippet       bool
 }
 
 const dateLayout = "2006-01-02"
@@ -47,10 +48,15 @@ body; --body matches the body only.
 --folder is also repeatable: each named mailbox is searched and the results are
 merged (ordered by received time, since UIDs aren't comparable across folders).
 
+By default repeated --contains values are ORed (match any). Pass
+--contains-match all to require every term instead (match all). A single query
+is either all-OR or all-AND; for mixed boolean logic, run separate queries.
+
 Examples:
   imap-cli search --from alice@example.com --limit 20
   imap-cli search --subject invoice --since 2026-01-01
   imap-cli search --folder INBOX --folder "[Gmail]/Sent Mail" --contains invoice
+  imap-cli search --contains refund --contains order --contains-match all
 
   # Orders from Amazon (or eBay) in the last 24 hours:
   imap-cli search --from amazon --from ebay --since-hours 24 \
@@ -67,6 +73,15 @@ Examples:
 			Limit:       searchFlags.limit,
 			Offset:      searchFlags.offset,
 			WithSnippet: searchFlags.snippet,
+		}
+
+		switch searchFlags.containsMatch {
+		case "any":
+			p.ContainsAll = false
+		case "all":
+			p.ContainsAll = true
+		default:
+			return fmt.Errorf("invalid --contains-match %q: want \"any\" or \"all\"", searchFlags.containsMatch)
 		}
 
 		if searchFlags.seen && searchFlags.unseen {
@@ -112,7 +127,8 @@ func init() {
 	f.StringArrayVar(&searchFlags.to, "to", nil, "match the To header (repeatable; ORed)")
 	f.StringArrayVar(&searchFlags.subject, "subject", nil, "match the Subject header (repeatable; ORed)")
 	f.StringArrayVar(&searchFlags.body, "body", nil, "match text in the body (repeatable; ORed)")
-	f.StringArrayVar(&searchFlags.contains, "contains", nil, "match text in any header or the body (repeatable; ORed)")
+	f.StringArrayVar(&searchFlags.contains, "contains", nil, "match text in any header or the body (repeatable)")
+	f.StringVar(&searchFlags.containsMatch, "contains-match", "any", "how repeated --contains combine: \"any\" (OR) or \"all\" (AND)")
 	f.StringVar(&searchFlags.since, "since", "", "messages on/after this date (YYYY-MM-DD)")
 	f.StringVar(&searchFlags.before, "before", "", "messages before this date (YYYY-MM-DD)")
 	f.IntVar(&searchFlags.sinceHours, "since-hours", 0, "only messages received within the last N hours (exact)")
