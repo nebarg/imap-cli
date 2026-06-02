@@ -80,12 +80,12 @@ together. So:
 | `--from amazon --contains order --contains receipt` | from amazon **AND** (order **OR** receipt) |
 
 **Requiring multiple terms (AND).** Repeating a filter ORs by default. For
-`--contains`, you can flip that with `--contains-match all`, which requires
+`--contains`, you can flip that with `--contains-match-all`, which requires
 *every* term:
 
 ```sh
 # messages mentioning BOTH refund AND order, anywhere
-./imap-cli search --contains refund --contains order --contains-match all
+./imap-cli search --contains refund --contains order --contains-match-all
 ```
 
 A single query is either all-OR or all-AND — mixing the two (e.g.
@@ -99,18 +99,36 @@ server received time.
 
 Each result contains: `uid`, `folder`, `from`, `to`, `subject`, `date`
 (sender's Date header), `received` (server receipt time, RFC 3339), `flags`,
-`seen`, `size`, and optionally `snippet`.
+`seen`, `size_bytes`, and optionally `snippet`.
 
-### `read` — fetch one full message by UID
+### `read` — fetch full messages by UID
 
 ```sh
 ./imap-cli read --uid 4213 --folder INBOX
 ./imap-cli read --uid 4213 --include-html
+./imap-cli read --uid 4213 --uid 4214        # several at once
+./imap-cli read --uid 4213,4214,4220         # comma list, one round-trip
 ```
 
-Returns full headers, `body_text` (plain text; HTML is stripped to text when no
-plain-text part exists), and `attachments` metadata (filename, content type —
-payloads are **not** downloaded). `--include-html` adds the raw HTML body.
+Returns a JSON array with one entry per requested UID, ordered to match the UIDs
+you asked for. Each entry is `{"uid": N, "found": true, "message": {…}}`; a UID
+with no matching message comes back as `{"uid": N, "found": false}` rather than
+being dropped, so you can always tell which UIDs resolved.
+
+```json
+[
+  { "uid": 4213, "found": true,  "message": { "subject": "...", "body_text": "..." } },
+  { "uid": 4214, "found": false }
+]
+```
+
+Each `message` has full headers, `body_text` (plain text; HTML is stripped to
+text when no plain-text part exists), and `attachments` metadata (filename,
+content type — payloads are **not** downloaded). `--include-html` adds the raw
+HTML body.
+
+`--uid` is repeatable (or comma-separated) so you can read several messages in a
+single IMAP round-trip. All UIDs are read from the same `--folder`.
 
 UIDs come from `search` and are stable within a mailbox, so the usual flow is
 *search → pick a UID → read*.

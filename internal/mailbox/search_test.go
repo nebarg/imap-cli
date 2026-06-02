@@ -57,7 +57,7 @@ func TestBuildCriteriaCombinesFields(t *testing.T) {
 	}
 }
 
-// TestBuildCriteriaContainsMatch checks --contains-match any vs all.
+// TestBuildCriteriaContainsMatch checks --contains-match-all (AND) vs default (OR).
 func TestBuildCriteriaContainsMatch(t *testing.T) {
 	// Default (any): two terms become an OR pair, not multiple TEXT keys.
 	any := buildCriteria(SearchParams{Contains: []string{"refund", "order"}})

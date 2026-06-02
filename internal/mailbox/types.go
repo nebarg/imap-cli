@@ -35,7 +35,7 @@ type MessageSummary struct {
 	Received string    `json:"received,omitempty"` // RFC 3339; server received time (INTERNALDATE)
 	Flags    []string  `json:"flags"`
 	Seen     bool      `json:"seen"`
-	Size     int64     `json:"size"`
+	Size     int64     `json:"size_bytes"`
 	Snippet  string    `json:"snippet,omitempty"`
 }
 
@@ -43,7 +43,7 @@ type MessageSummary struct {
 type Attachment struct {
 	Filename    string `json:"filename"`
 	ContentType string `json:"content_type,omitempty"`
-	Size        int64  `json:"size,omitempty"`
+	Size        int64  `json:"size_bytes,omitempty"`
 }
 
 // Message is the full representation returned by read.
@@ -59,8 +59,17 @@ type Message struct {
 	MessageID   string       `json:"message_id,omitempty"`
 	Flags       []string     `json:"flags"`
 	Seen        bool         `json:"seen"`
-	Size        int64        `json:"size"`
+	Size        int64        `json:"size_bytes"`
 	BodyText    string       `json:"body_text"`
 	BodyHTML    string       `json:"body_html,omitempty"`
 	Attachments []Attachment `json:"attachments"`
+}
+
+// ReadResult pairs a requested UID with its message. Found is false (and
+// Message nil) when no message with that UID exists in the folder, so every
+// requested UID stays visible in the response.
+type ReadResult struct {
+	UID     uint32   `json:"uid"`
+	Found   bool     `json:"found"`
+	Message *Message `json:"message,omitempty"`
 }
