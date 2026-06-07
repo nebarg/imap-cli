@@ -39,11 +39,14 @@ type MessageSummary struct {
 	Snippet  string    `json:"snippet,omitempty"`
 }
 
-// Attachment is attachment metadata (no payload is downloaded).
+// Attachment is attachment metadata (no payload is downloaded). Size is the
+// encoded part size IMAP reports in BODYSTRUCTURE — the on-the-wire octet count,
+// which for base64 parts is larger than the decoded file. The actual decoded
+// size is only known once the bytes are fetched (see AttachmentResult).
 type Attachment struct {
 	Filename    string `json:"filename"`
 	ContentType string `json:"content_type,omitempty"`
-	Size        int64  `json:"size_bytes,omitempty"`
+	Size        int64  `json:"encoded_size_bytes,omitempty"`
 }
 
 // Message is the full representation returned by read.

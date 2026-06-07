@@ -23,13 +23,15 @@ type AttachmentParams struct {
 }
 
 // AttachmentResult describes the extracted attachment. Exactly one of Path,
-// Base64, or Text is populated, depending on the requested delivery.
+// Base64, or Text is populated, depending on the requested delivery. SizeBytes
+// is the decoded byte count — the real file size, which differs from read's
+// encoded_size_bytes for base64-encoded parts.
 type AttachmentResult struct {
 	UID         uint32 `json:"uid"`
 	Index       int    `json:"index"`
 	Filename    string `json:"filename,omitempty"`
 	ContentType string `json:"content_type,omitempty"`
-	SizeBytes   int64  `json:"size_bytes"`
+	SizeBytes   int64  `json:"decoded_size_bytes"`
 	Path        string `json:"path,omitempty"`
 	Base64      string `json:"base64,omitempty"`
 	Text        string `json:"text,omitempty"`

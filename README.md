@@ -124,8 +124,9 @@ being dropped, so you can always tell which UIDs resolved.
 
 Each `message` has full headers, `body_text` (plain text; HTML is stripped to
 text when no plain-text part exists), and `attachments` metadata — `filename`,
-`content_type`, and `size_bytes` (the encoded size IMAP reports; payloads are
-**not** downloaded). `--include-html` adds the raw HTML body.
+`content_type`, and `encoded_size_bytes` (the on-the-wire size IMAP reports;
+payloads are **not** downloaded, so the decoded file size isn't known here).
+`--include-html` adds the raw HTML body.
 
 Reading is bandwidth-light: only the structure and the text part are fetched, so
 attachment payloads never come down the wire. `--uid` is repeatable (or
@@ -157,12 +158,13 @@ the content directly:
 { "ok": true, "data": {
     "uid": 4213, "index": 1,
     "filename": "statement.pdf", "content_type": "application/pdf",
-    "size_bytes": 81876,
+    "decoded_size_bytes": 81876,
     "text": "CUSTOMER ID 12570184 ... Activity statement ..." } }
 ```
 
-`size_bytes` here is the actual decoded size of the bytes produced (note this can
-differ from `read`'s `size_bytes`, which is IMAP's encoded part size).
+`decoded_size_bytes` is the actual size of the bytes produced (the real file
+size). It differs from `read`'s `encoded_size_bytes`, which is IMAP's on-the-wire
+part size — for base64 attachments the encoded size is ~33% larger.
 
 ## Global flags
 
