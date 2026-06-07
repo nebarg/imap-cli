@@ -9,14 +9,14 @@ import (
 	"github.com/ledongthuc/pdf"
 )
 
-// extractText pulls readable text from an attachment's bytes. It supports
-// text/* (returned as-is) and PDF; other types return an error directing the
-// caller to fetch the raw bytes instead.
-func extractText(contentType, filename string, data []byte) (string, error) {
+// extractText pulls readable text from an attachment's already transfer-decoded
+// bytes. It supports text/* (charset-decoded to UTF-8) and PDF; other types
+// return an error directing the caller to fetch the raw bytes instead.
+func extractText(contentType, filename, charsetName string, data []byte) (string, error) {
 	ct := strings.ToLower(contentType)
 	switch {
 	case strings.HasPrefix(ct, "text/"):
-		return string(data), nil
+		return string(charsetDecode(data, charsetName)), nil
 	case ct == "application/pdf" || strings.HasSuffix(strings.ToLower(filename), ".pdf"):
 		return extractPDF(data)
 	default:

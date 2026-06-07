@@ -19,11 +19,13 @@ type bodyTarget struct {
 }
 
 // attachmentPart is a non-text MIME part: its public metadata plus the IMAP
-// part path and transfer-encoding needed to fetch and decode it on demand.
+// part path, transfer-encoding, and charset needed to fetch and decode it on
+// demand. (charset only matters for text attachments extracted with --as-text.)
 type attachmentPart struct {
 	Attachment        // Filename, ContentType, Size
 	path       []int  // IMAP part number, e.g. [2] or [1 2]
 	encoding   string // Content-Transfer-Encoding
+	charset    string // charset param, if any
 }
 
 // planMessage walks a BODYSTRUCTURE (no payload downloaded) and decides which
@@ -59,6 +61,7 @@ func planMessage(bs imap.BodyStructure) (plain, html *bodyTarget, attachments []
 				},
 				path:     append([]int(nil), path...), // copy: Walk reuses its buffer
 				encoding: sp.Encoding,
+				charset:  paramCharset(sp.Params),
 			})
 		}
 		return true
@@ -115,21 +118,25 @@ func transferDecode(raw []byte, encoding string) []byte {
 	return raw
 }
 
+// charsetDecode converts already-transfer-decoded bytes from the named charset
+// to UTF-8. UTF-8/ASCII pass through; an unknown charset or a decode error
+// leaves the bytes as-is (best-effort).
+func charsetDecode(data []byte, charsetName string) []byte {
+	switch strings.ToLower(charsetName) {
+	case "", "utf-8", "utf8", "us-ascii", "ascii":
+		return data
+	}
+	if r, err := charset.Reader(charsetName, bytes.NewReader(data)); err == nil {
+		if conv, err := io.ReadAll(r); err == nil {
+			return conv
+		}
+	}
+	return data
+}
+
 // decodeText turns a raw fetched part into a UTF-8 string, undoing its
 // Content-Transfer-Encoding and charset. It is best-effort and tolerates
 // truncated input.
 func decodeText(raw []byte, encoding, charsetName string) string {
-	data := transferDecode(raw, encoding)
-
-	switch strings.ToLower(charsetName) {
-	case "", "utf-8", "utf8", "us-ascii", "ascii":
-		// already UTF-8 compatible
-	default:
-		if r, err := charset.Reader(charsetName, bytes.NewReader(data)); err == nil {
-			if conv, err := io.ReadAll(r); err == nil {
-				data = conv
-			}
-		}
-	}
-	return string(data)
+	return string(charsetDecode(transferDecode(raw, encoding), charsetName))
 }

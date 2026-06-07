@@ -60,7 +60,7 @@ func (c *Client) Attachment(p AttachmentParams) (*AttachmentResult, error) {
 	}
 	switch {
 	case p.AsText:
-		text, err := extractText(att.ContentType, att.Filename, data)
+		text, err := extractText(att.ContentType, att.Filename, att.charset, data)
 		if err != nil {
 			return nil, err
 		}
