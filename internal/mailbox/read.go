@@ -103,7 +103,10 @@ func (c *Client) readMessage(folder string, m *imapclient.FetchMessageBuffer, in
 		return msg, nil
 	}
 	plain, html, attachments := planMessage(m.BodyStructure)
-	msg.Attachments = attachments
+	msg.Attachments = make([]Attachment, len(attachments))
+	for i, a := range attachments {
+		msg.Attachments[i] = a.Attachment
+	}
 
 	// We want the HTML part when the caller asked for it, or as a fallback to
 	// derive body text when there is no plain-text part.

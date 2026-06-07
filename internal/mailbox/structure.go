@@ -18,13 +18,23 @@ type bodyTarget struct {
 	charset  string                     // charset param, if any
 }
 
+// attachmentPart is a non-text MIME part: its public metadata plus the IMAP
+// part path and transfer-encoding needed to fetch and decode it on demand.
+type attachmentPart struct {
+	Attachment        // Filename, ContentType, Size
+	path       []int  // IMAP part number, e.g. [2] or [1 2]
+	encoding   string // Content-Transfer-Encoding
+}
+
 // planMessage walks a BODYSTRUCTURE (no payload downloaded) and decides which
 // text parts to fetch and which parts are attachments. It picks the first
 // non-attachment text/plain part and the first non-attachment text/html part;
 // everything else (files, inline images, nested messages) is listed as an
-// attachment with its size, which BODYSTRUCTURE reports for free.
-func planMessage(bs imap.BodyStructure) (plain, html *bodyTarget, attachments []Attachment) {
-	attachments = []Attachment{}
+// attachment with its size, which BODYSTRUCTURE reports for free. The
+// attachment order is the DFS order of the MIME tree, which is the order
+// callers index by.
+func planMessage(bs imap.BodyStructure) (plain, html *bodyTarget, attachments []attachmentPart) {
+	attachments = []attachmentPart{}
 	bs.Walk(func(path []int, part imap.BodyStructure) bool {
 		sp, ok := part.(*imap.BodyStructureSinglePart)
 		if !ok {
@@ -41,10 +51,14 @@ func planMessage(bs imap.BodyStructure) (plain, html *bodyTarget, attachments []
 		case !isAttachment && mediaType == "text/html" && html == nil:
 			html = targetFor(path, sp)
 		default:
-			attachments = append(attachments, Attachment{
-				Filename:    sp.Filename(),
-				ContentType: mediaType,
-				Size:        int64(sp.Size),
+			attachments = append(attachments, attachmentPart{
+				Attachment: Attachment{
+					Filename:    sp.Filename(),
+					ContentType: mediaType,
+					Size:        int64(sp.Size),
+				},
+				path:     append([]int(nil), path...), // copy: Walk reuses its buffer
+				encoding: sp.Encoding,
 			})
 		}
 		return true
@@ -73,12 +87,11 @@ func paramCharset(params map[string]string) string {
 	return ""
 }
 
-// decodeText turns a raw fetched part into a UTF-8 string, undoing its
-// Content-Transfer-Encoding and charset. It is best-effort and tolerates
-// truncated input (a partial fetch may cut base64/quoted-printable mid-token):
-// on any decode error it uses whatever it managed to decode.
-func decodeText(raw []byte, encoding, charsetName string) string {
-	data := raw
+// transferDecode undoes a part's Content-Transfer-Encoding (base64 or
+// quoted-printable), returning the raw payload bytes. It is best-effort and
+// tolerates truncated input (a partial fetch may cut a token mid-way): on a
+// decode error it uses whatever it managed to decode.
+func transferDecode(raw []byte, encoding string) []byte {
 	switch strings.ToLower(strings.TrimSpace(encoding)) {
 	case "base64":
 		cleaned := bytes.Map(func(r rune) rune {
@@ -90,15 +103,23 @@ func decodeText(raw []byte, encoding, charsetName string) string {
 		// Drop any trailing partial quantum so a truncated chunk still decodes.
 		cleaned = cleaned[:len(cleaned)-len(cleaned)%4]
 		if d, err := base64.StdEncoding.DecodeString(string(cleaned)); err == nil {
-			data = d
+			return d
 		}
 	case "quoted-printable":
 		// io.ReadAll returns what it decoded even if it stops on a dangling
 		// soft-break at a truncation boundary; use that rather than the raw.
 		if d, _ := io.ReadAll(quotedprintable.NewReader(bytes.NewReader(raw))); len(d) > 0 {
-			data = d
+			return d
 		}
 	}
+	return raw
+}
+
+// decodeText turns a raw fetched part into a UTF-8 string, undoing its
+// Content-Transfer-Encoding and charset. It is best-effort and tolerates
+// truncated input.
+func decodeText(raw []byte, encoding, charsetName string) string {
+	data := transferDecode(raw, encoding)
 
 	switch strings.ToLower(charsetName) {
 	case "", "utf-8", "utf8", "us-ascii", "ascii":
