@@ -123,15 +123,46 @@ being dropped, so you can always tell which UIDs resolved.
 ```
 
 Each `message` has full headers, `body_text` (plain text; HTML is stripped to
-text when no plain-text part exists), and `attachments` metadata (filename,
-content type — payloads are **not** downloaded). `--include-html` adds the raw
-HTML body.
+text when no plain-text part exists), and `attachments` metadata — `filename`,
+`content_type`, and `size_bytes` (the encoded size IMAP reports; payloads are
+**not** downloaded). `--include-html` adds the raw HTML body.
 
-`--uid` is repeatable (or comma-separated) so you can read several messages in a
-single IMAP round-trip. All UIDs are read from the same `--folder`.
+Reading is bandwidth-light: only the structure and the text part are fetched, so
+attachment payloads never come down the wire. `--uid` is repeatable (or
+comma-separated) to read several messages from the same `--folder` at once.
 
 UIDs come from `search` and are stable within a mailbox, so the usual flow is
-*search → pick a UID → read*.
+*search → pick a UID → read → (optionally) fetch an attachment*.
+
+### `attachment` — download one attachment by UID and index
+
+```sh
+./imap-cli attachment --uid 4213 --index 1                 # save to a file
+./imap-cli attachment --uid 4213 --index 1 --out-dir ~/dl  # choose the directory
+./imap-cli attachment --uid 4213 --index 1 --base64        # inline base64 in JSON
+./imap-cli attachment --uid 4213 --index 1 --as-text       # extract readable text
+```
+
+`--index` is 1-based and refers to the attachment's position in that message's
+`attachments` list from `read` (so `--index 1` is the first). Only that one MIME
+part is fetched — not the body or the other attachments — and the message is
+never marked as seen.
+
+By default the decoded bytes are written under `<temp>/imap-cli` (or `--out-dir`)
+and the `path` is returned. `--base64` returns the bytes inline instead.
+`--as-text` extracts readable text (PDF and `text/*` formats) so an LLM can read
+the content directly:
+
+```json
+{ "ok": true, "data": {
+    "uid": 4213, "index": 1,
+    "filename": "statement.pdf", "content_type": "application/pdf",
+    "size_bytes": 81876,
+    "text": "CUSTOMER ID 12570184 ... Activity statement ..." } }
+```
+
+`size_bytes` here is the actual decoded size of the bytes produced (note this can
+differ from `read`'s `size_bytes`, which is IMAP's encoded part size).
 
 ## Global flags
 

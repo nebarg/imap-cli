@@ -17,12 +17,13 @@ type AttachmentParams struct {
 	Folder string
 	UID    uint32
 	Index  int  // 1-based position in the message's attachments list (from read)
+	AsText bool // extract readable text (PDF/text) instead of raw bytes
 	Base64 bool // return bytes inline as base64 instead of saving a file
 	OutDir string
 }
 
-// AttachmentResult describes the extracted attachment. Exactly one of Path or
-// Base64 is populated, depending on the requested delivery.
+// AttachmentResult describes the extracted attachment. Exactly one of Path,
+// Base64, or Text is populated, depending on the requested delivery.
 type AttachmentResult struct {
 	UID         uint32 `json:"uid"`
 	Index       int    `json:"index"`
@@ -31,6 +32,7 @@ type AttachmentResult struct {
 	SizeBytes   int64  `json:"size_bytes"`
 	Path        string `json:"path,omitempty"`
 	Base64      string `json:"base64,omitempty"`
+	Text        string `json:"text,omitempty"`
 }
 
 // Attachment fetches a single attachment by UID and index without marking the
@@ -38,6 +40,10 @@ type AttachmentResult struct {
 // Like read, it is two-phase: BODYSTRUCTURE to map the index to a MIME part,
 // then a targeted fetch of just that part.
 func (c *Client) Attachment(p AttachmentParams) (*AttachmentResult, error) {
+	if p.AsText && p.Base64 {
+		return nil, fmt.Errorf("--as-text and --base64 are mutually exclusive")
+	}
+
 	att, data, err := c.fetchAttachment(p)
 	if err != nil {
 		return nil, err
@@ -50,15 +56,22 @@ func (c *Client) Attachment(p AttachmentParams) (*AttachmentResult, error) {
 		ContentType: att.ContentType,
 		SizeBytes:   int64(len(data)),
 	}
-	if p.Base64 {
+	switch {
+	case p.AsText:
+		text, err := extractText(att.ContentType, att.Filename, data)
+		if err != nil {
+			return nil, err
+		}
+		res.Text = text
+	case p.Base64:
 		res.Base64 = base64.StdEncoding.EncodeToString(data)
-		return res, nil
+	default:
+		path, err := saveAttachment(p.OutDir, p.UID, p.Index, att.Filename, att.ContentType, data)
+		if err != nil {
+			return nil, err
+		}
+		res.Path = path
 	}
-	path, err := saveAttachment(p.OutDir, p.UID, p.Index, att.Filename, att.ContentType, data)
-	if err != nil {
-		return nil, err
-	}
-	res.Path = path
 	return res, nil
 }
 
