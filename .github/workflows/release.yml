@@ -8,6 +8,12 @@ on:
 permissions:
   contents: write
 
+env:
+  # Run the JavaScript-based actions on Node.js 24. Node 20 is deprecated;
+  # the runner default flips on 2026-06-16, so opt in early to silence the
+  # warning. Remove once all actions ship Node 24 support by default.
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   build:
     runs-on: ubuntu-latest
