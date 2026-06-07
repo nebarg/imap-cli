@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/emersion/go-imap/v2"
+	"github.com/emersion/go-imap/v2/imapclient"
+	"github.com/jaytaylor/html2text"
 )
 
 // SearchParams describes a server-side IMAP search.
@@ -144,10 +146,10 @@ func (c *Client) fetchSummaries(folder string, uids []imap.UID, withSnippet bool
 		RFC822Size:   true,
 		InternalDate: true,
 	}
-	var bodySection *imap.FetchItemBodySection
 	if withSnippet {
-		bodySection = &imap.FetchItemBodySection{Peek: true}
-		fetchOpts.BodySection = []*imap.FetchItemBodySection{bodySection}
+		// Fetch the MIME structure, not the bodies, so the snippet phase can
+		// pull just the text part and never the attachments.
+		fetchOpts.BodyStructure = &imap.FetchItemBodyStructure{Extended: true}
 	}
 
 	msgs, err := c.imap.Fetch(imap.UIDSetNum(uids...), fetchOpts).Collect()
@@ -174,19 +176,113 @@ func (c *Client) fetchSummaries(folder string, uids []imap.UID, withSnippet bool
 				s.Date = m.Envelope.Date.Format(time.RFC3339)
 			}
 		}
-		if withSnippet && bodySection != nil {
-			if raw := m.FindBodySection(bodySection); raw != nil {
-				if pb, err := parseBody(raw); err == nil {
-					s.Snippet = snippet(pb.text, snippetLen)
-				}
-			}
-		}
 		summaries = append(summaries, s)
+	}
+
+	if withSnippet {
+		if err := c.addSnippets(msgs, summaries); err != nil {
+			return nil, err
+		}
 	}
 
 	// Fetch may return messages out of order; restore newest-first.
 	sort.Slice(summaries, func(i, j int) bool { return summaries[i].UID > summaries[j].UID })
 	return summaries, nil
+}
+
+type snippetPlan struct {
+	section  *imap.FetchItemBodySection
+	encoding string
+	charset  string
+	isHTML   bool
+}
+
+// snippetGroup is a set of UIDs whose text body lives at the same part path, so
+// they can be fetched together with one section.
+type snippetGroup struct {
+	section *imap.FetchItemBodySection
+	uids    []imap.UID
+}
+
+// addSnippets fills MessageSummary.Snippet by fetching only each message's text
+// part, located by part number from its already-fetched BODYSTRUCTURE, so
+// attachment payloads are never downloaded for a preview.
+//
+// Messages are grouped by their text-part path and each group is fetched for
+// just its own UIDs. We deliberately do NOT fetch the union of all paths for
+// all UIDs: part [2] may be text in one message but a PDF in another, so a union
+// fetch would pull that PDF — the very waste we're avoiding. The number of
+// round-trips is the number of distinct text-part paths, usually one or two.
+//
+// We fetch the whole text part rather than a leading slice: HTML emails often
+// begin with kilobytes of <style>/preamble, so a short prefix yields no visible
+// text after stripping. The text part alone is small next to the attachments we
+// already skip.
+func (c *Client) addSnippets(meta []*imapclient.FetchMessageBuffer, summaries []MessageSummary) error {
+	plans := make(map[uint32]snippetPlan, len(meta))
+	groups := make(map[string]*snippetGroup)
+	for _, m := range meta {
+		if m.BodyStructure == nil {
+			continue
+		}
+		plain, html, _ := planMessage(m.BodyStructure)
+		t, isHTML := plain, false
+		if t == nil {
+			t, isHTML = html, true
+		}
+		if t == nil {
+			continue // nothing textual (e.g. attachments only)
+		}
+		key := fmt.Sprint(t.section.Part)
+		g, ok := groups[key]
+		if !ok {
+			g = &snippetGroup{section: &imap.FetchItemBodySection{Part: t.section.Part, Peek: true}}
+			groups[key] = g
+		}
+		g.uids = append(g.uids, m.UID)
+		plans[uint32(m.UID)] = snippetPlan{section: g.section, encoding: t.encoding, charset: t.charset, isHTML: isHTML}
+	}
+	if len(groups) == 0 {
+		return nil
+	}
+
+	bodyByUID := make(map[uint32]*imapclient.FetchMessageBuffer, len(plans))
+	for _, g := range groups {
+		bodyMsgs, err := c.imap.Fetch(imap.UIDSetNum(g.uids...), &imap.FetchOptions{
+			BodySection: []*imap.FetchItemBodySection{g.section},
+		}).Collect()
+		if err != nil {
+			return fmt.Errorf("fetching snippet bodies: %w", err)
+		}
+		for _, m := range bodyMsgs {
+			bodyByUID[uint32(m.UID)] = m
+		}
+	}
+	idxByUID := make(map[uint32]int, len(summaries))
+	for i, s := range summaries {
+		idxByUID[s.UID] = i
+	}
+
+	for uid, pl := range plans {
+		bm := bodyByUID[uid]
+		if bm == nil {
+			continue
+		}
+		raw := bm.FindBodySection(pl.section)
+		if raw == nil {
+			continue
+		}
+		text := decodeText(raw, pl.encoding, pl.charset)
+		if pl.isHTML {
+			if txt, err := html2text.FromString(text, html2text.Options{TextOnly: true}); err == nil {
+				text = txt
+			}
+		}
+		if i, ok := idxByUID[uid]; ok {
+			summaries[i].Snippet = snippet(text, snippetLen)
+		}
+	}
+	return nil
 }
 
 // filterReceivedSince keeps summaries whose received time is at or after cutoff.

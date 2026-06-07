@@ -10,22 +10,22 @@ import (
 )
 
 var searchFlags struct {
-	folders       []string
-	from          []string
-	to            []string
-	subject       []string
-	body          []string
-	contains      []string
-	containsAll   bool
-	since         string
-	before        string
-	sinceHours    int
-	seen          bool
-	unseen        bool
-	flagged       bool
-	limit         int
-	offset        int
-	snippet       bool
+	folders     []string
+	from        []string
+	to          []string
+	subject     []string
+	body        []string
+	contains    []string
+	containsAll bool
+	since       string
+	before      string
+	sinceHours  int
+	seen        bool
+	unseen      bool
+	flagged     bool
+	limit       int
+	offset      int
+	snippet     bool
 }
 
 const dateLayout = "2006-01-02"
@@ -137,5 +137,5 @@ func init() {
 	f.BoolVar(&searchFlags.flagged, "flagged", false, "filter by flagged/starred state")
 	f.IntVar(&searchFlags.limit, "limit", 50, "maximum number of results (0 = no limit)")
 	f.IntVar(&searchFlags.offset, "offset", 0, "number of results to skip (for paging)")
-	f.BoolVar(&searchFlags.snippet, "snippet", false, "include a short body preview (fetches bodies)")
+	f.BoolVar(&searchFlags.snippet, "snippet", false, "include a short body preview (fetches the text part only, not attachments)")
 }

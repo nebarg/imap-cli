@@ -74,8 +74,9 @@ func paramCharset(params map[string]string) string {
 }
 
 // decodeText turns a raw fetched part into a UTF-8 string, undoing its
-// Content-Transfer-Encoding and charset. It is best-effort: on any decode
-// error it falls back to the bytes it has rather than failing the read.
+// Content-Transfer-Encoding and charset. It is best-effort and tolerates
+// truncated input (a partial fetch may cut base64/quoted-printable mid-token):
+// on any decode error it uses whatever it managed to decode.
 func decodeText(raw []byte, encoding, charsetName string) string {
 	data := raw
 	switch strings.ToLower(strings.TrimSpace(encoding)) {
@@ -86,13 +87,15 @@ func decodeText(raw []byte, encoding, charsetName string) string {
 			}
 			return r
 		}, raw)
+		// Drop any trailing partial quantum so a truncated chunk still decodes.
+		cleaned = cleaned[:len(cleaned)-len(cleaned)%4]
 		if d, err := base64.StdEncoding.DecodeString(string(cleaned)); err == nil {
-			data = d
-		} else if d, err := base64.RawStdEncoding.DecodeString(string(cleaned)); err == nil {
 			data = d
 		}
 	case "quoted-printable":
-		if d, err := io.ReadAll(quotedprintable.NewReader(bytes.NewReader(raw))); err == nil {
+		// io.ReadAll returns what it decoded even if it stops on a dangling
+		// soft-break at a truncation boundary; use that rather than the raw.
+		if d, _ := io.ReadAll(quotedprintable.NewReader(bytes.NewReader(raw))); len(d) > 0 {
 			data = d
 		}
 	}
