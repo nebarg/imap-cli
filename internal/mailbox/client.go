@@ -12,9 +12,11 @@ import (
 	"go-imap-cli/internal/config"
 )
 
-// Client is a connected, authenticated read-only IMAP session.
+// Client is a connected, authenticated read-only IMAP session. It talks to the
+// server through the session interface so its command logic can be tested with
+// a fake; Connect wires in the real adapter.
 type Client struct {
-	imap *imapclient.Client
+	sess session
 }
 
 // Connect dials the account's server, negotiates TLS and logs in. The caller
@@ -43,24 +45,22 @@ func Connect(acc config.Account, timeout time.Duration) (*Client, error) {
 		return nil, fmt.Errorf("login failed for %s: %w", acc.Username, err)
 	}
 
-	return &Client{imap: c}, nil
+	return &Client{sess: imapSession{c: c}}, nil
 }
 
 // Close logs out and tears down the connection.
 func (c *Client) Close() error {
-	if c.imap == nil {
+	if c.sess == nil {
 		return nil
 	}
-	// Best-effort logout; always close the socket.
-	_ = c.imap.Logout().Wait()
-	return c.imap.Close()
+	return c.sess.Close()
 }
 
 // Folders lists the account's mailboxes. Unselectable folders (structural
 // containers/placeholders that can't hold mail, e.g. Gmail's "[Gmail]") are
 // omitted unless includeUnselectable is true.
 func (c *Client) Folders(includeUnselectable bool) ([]Folder, error) {
-	mboxes, err := c.imap.List("", "*", nil).Collect()
+	mboxes, err := c.sess.List()
 	if err != nil {
 		return nil, fmt.Errorf("listing mailboxes: %w", err)
 	}

@@ -88,15 +88,15 @@ func (c *Client) fetchAttachment(p AttachmentParams) (attachmentPart, []byte, er
 	if p.Index < 1 {
 		return zero, nil, fmt.Errorf("--index must be 1 or greater")
 	}
-	if _, err := c.imap.Select(folder, &imap.SelectOptions{ReadOnly: true}).Wait(); err != nil {
+	if err := c.sess.Select(folder); err != nil {
 		return zero, nil, fmt.Errorf("selecting %q: %w", folder, err)
 	}
 
 	uidSet := imap.UIDSetNum(imap.UID(p.UID))
-	metaMsgs, err := c.imap.Fetch(uidSet, &imap.FetchOptions{
+	metaMsgs, err := c.sess.Fetch(uidSet, &imap.FetchOptions{
 		UID:           true,
 		BodyStructure: &imap.FetchItemBodyStructure{Extended: true},
-	}).Collect()
+	})
 	if err != nil {
 		return zero, nil, fmt.Errorf("fetching structure: %w", err)
 	}
@@ -114,9 +114,9 @@ func (c *Client) fetchAttachment(p AttachmentParams) (attachmentPart, []byte, er
 	att := atts[p.Index-1]
 
 	section := &imap.FetchItemBodySection{Part: att.path, Peek: true}
-	bodyMsgs, err := c.imap.Fetch(uidSet, &imap.FetchOptions{
+	bodyMsgs, err := c.sess.Fetch(uidSet, &imap.FetchOptions{
 		BodySection: []*imap.FetchItemBodySection{section},
-	}).Collect()
+	})
 	if err != nil {
 		return zero, nil, fmt.Errorf("fetching attachment: %w", err)
 	}

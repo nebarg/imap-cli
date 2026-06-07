@@ -92,16 +92,15 @@ func (c *Client) Search(p SearchParams) ([]MessageSummary, error) {
 // summaries newest-first by UID (cutoff-filtered when cutoff is non-zero). cap,
 // when > 0, limits how many of the newest matches are fetched.
 func (c *Client) searchFolder(folder string, criteria *imap.SearchCriteria, cutoff time.Time, withSnippet bool, maxFetch int) ([]MessageSummary, error) {
-	if _, err := c.imap.Select(folder, &imap.SelectOptions{ReadOnly: true}).Wait(); err != nil {
+	if err := c.sess.Select(folder); err != nil {
 		return nil, fmt.Errorf("selecting %q: %w", folder, err)
 	}
 
-	data, err := c.imap.UIDSearch(criteria, nil).Wait()
+	uids, err := c.sess.UIDSearch(criteria)
 	if err != nil {
 		return nil, fmt.Errorf("search in %q failed: %w", folder, err)
 	}
 
-	uids := data.AllUIDs()
 	// Newest first: higher UIDs are more recent within a mailbox.
 	sort.Slice(uids, func(i, j int) bool { return uids[i] > uids[j] })
 	if maxFetch > 0 && len(uids) > maxFetch {
@@ -152,7 +151,7 @@ func (c *Client) fetchSummaries(folder string, uids []imap.UID, withSnippet bool
 		fetchOpts.BodyStructure = &imap.FetchItemBodyStructure{Extended: true}
 	}
 
-	msgs, err := c.imap.Fetch(imap.UIDSetNum(uids...), fetchOpts).Collect()
+	msgs, err := c.sess.Fetch(imap.UIDSetNum(uids...), fetchOpts)
 	if err != nil {
 		return nil, fmt.Errorf("fetching summaries: %w", err)
 	}
@@ -248,9 +247,9 @@ func (c *Client) addSnippets(meta []*imapclient.FetchMessageBuffer, summaries []
 
 	bodyByUID := make(map[uint32]*imapclient.FetchMessageBuffer, len(plans))
 	for _, g := range groups {
-		bodyMsgs, err := c.imap.Fetch(imap.UIDSetNum(g.uids...), &imap.FetchOptions{
+		bodyMsgs, err := c.sess.Fetch(imap.UIDSetNum(g.uids...), &imap.FetchOptions{
 			BodySection: []*imap.FetchItemBodySection{g.section},
-		}).Collect()
+		})
 		if err != nil {
 			return fmt.Errorf("fetching snippet bodies: %w", err)
 		}

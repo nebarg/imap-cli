@@ -35,7 +35,7 @@ func (c *Client) Read(p ReadParams) ([]ReadResult, error) {
 	if len(p.UIDs) == 0 {
 		return nil, fmt.Errorf("no UIDs given")
 	}
-	if _, err := c.imap.Select(folder, &imap.SelectOptions{ReadOnly: true}).Wait(); err != nil {
+	if err := c.sess.Select(folder); err != nil {
 		return nil, fmt.Errorf("selecting %q: %w", folder, err)
 	}
 
@@ -52,7 +52,7 @@ func (c *Client) Read(p ReadParams) ([]ReadResult, error) {
 		RFC822Size:    true,
 		BodyStructure: &imap.FetchItemBodyStructure{Extended: true},
 	}
-	metaMsgs, err := c.imap.Fetch(imap.UIDSetNum(uids...), metaOpts).Collect()
+	metaMsgs, err := c.sess.Fetch(imap.UIDSetNum(uids...), metaOpts)
 	if err != nil {
 		return nil, fmt.Errorf("fetching structure: %w", err)
 	}
@@ -124,7 +124,7 @@ func (c *Client) readMessage(folder string, m *imapclient.FetchMessageBuffer, in
 	}
 
 	// Phase 2: fetch only the chosen text part(s). Peek keeps \Seen unset.
-	bodyMsgs, err := c.imap.Fetch(imap.UIDSetNum(imap.UID(m.UID)), &imap.FetchOptions{BodySection: sections}).Collect()
+	bodyMsgs, err := c.sess.Fetch(imap.UIDSetNum(imap.UID(m.UID)), &imap.FetchOptions{BodySection: sections})
 	if err != nil {
 		return nil, fmt.Errorf("fetching body of UID %d: %w", m.UID, err)
 	}
