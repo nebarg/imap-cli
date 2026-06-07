@@ -43,5 +43,5 @@ func init() {
 	pf.StringVar(&accountName, "account", "", "named account to use (reads IMAP_<NAME>_* vars)")
 	pf.IntVar(&timeoutSecs, "timeout", 30, "connection timeout in seconds")
 
-	rootCmd.AddCommand(foldersCmd, searchCmd, readCmd, attachmentCmd)
+	rootCmd.AddCommand(foldersCmd, searchCmd, readCmd, attachmentCmd, versionCmd)
 }
