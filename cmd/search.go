@@ -32,8 +32,8 @@ const dateLayout = "2006-01-02"
 
 var searchCmd = &cobra.Command{
 	Use:   "search",
-	Short: "Search messages and return JSON summaries (newest first)",
-	Long: `Search messages with server-side IMAP criteria and print JSON summaries
+	Short: "Search messages and return summaries (newest first)",
+	Long: `Search messages with server-side IMAP criteria and print summaries
 (newest first).
 
 What each filter matches:

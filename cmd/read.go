@@ -20,7 +20,7 @@ var readCmd = &cobra.Command{
 Messages are fetched with PEEK so the \Seen flag is never set. Pass --uid more
 than once (or as a comma list) to read several messages in a single round-trip.
 
-The result is always a JSON array with one entry per requested UID, ordered to
+The result is always an array with one entry per requested UID, ordered to
 match the UIDs you asked for. Each entry has "uid" and "found"; when found, the
 full message is nested under "message". A UID with no matching message comes
 back as {"uid": N, "found": false} rather than being dropped.

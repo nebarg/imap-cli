@@ -2,34 +2,55 @@
 package cmd
 
 import (
+	"fmt"
+
 	"github.com/spf13/cobra"
 )
 
 var (
-	envPath     string
-	accountName string
-	timeoutSecs int
+	envPath      string
+	accountName  string
+	timeoutSecs  int
+	outputFormat string
 )
 
 var rootCmd = &cobra.Command{
 	Use:   "imap-cli",
-	Short: "Read-only IMAP access that returns JSON, designed as an LLM tool",
-	Long: `imap-cli connects to an IMAP server and prints results as JSON.
+	Short: "Read-only IMAP access that returns JSON or TOON, designed as an LLM tool",
+	Long: `imap-cli connects to an IMAP server and prints results as JSON (or TOON).
 
 It is read-only: messages are never modified, deleted, or marked as seen.
-Every command prints a single JSON object to stdout in the form
+Every command prints a single object to stdout in the form
 {"ok": true, "data": ...} or {"ok": false, "error": "..."}.
+
+Pass --format toon to emit TOON instead — the same data in a compact,
+indentation-based encoding that costs roughly a third fewer tokens.
 
 Configuration is read from a .env file (and the environment):
   IMAP_HOST, IMAP_PORT, IMAP_USERNAME, IMAP_PASSWORD, IMAP_TLS`,
 	SilenceUsage:  true,
 	SilenceErrors: true,
+	PersistentPreRunE: func(_ *cobra.Command, _ []string) error {
+		return validateFormat(outputFormat)
+	},
+}
+
+// validateFormat rejects an unknown --format value. On rejection the format is
+// reset to JSON so the error envelope itself is still encodable.
+func validateFormat(format string) error {
+	switch format {
+	case formatJSON, formatTOON:
+		return nil
+	default:
+		outputFormat = formatJSON
+		return fmt.Errorf("unknown --format %q (want %s or %s)", format, formatJSON, formatTOON)
+	}
 }
 
 // Execute runs the root command. Errors that Cobra surfaces (bad flags,
-// missing required flags, validation) are emitted as the same JSON error
-// envelope used elsewhere, then the process exits non-zero — so every
-// invocation yields parseable JSON on stdout.
+// missing required flags, validation) are emitted as the same error envelope
+// used elsewhere, then the process exits non-zero — so every invocation yields
+// parseable output on stdout.
 func Execute() error {
 	if err := rootCmd.Execute(); err != nil {
 		fail(err)
@@ -42,6 +63,7 @@ func init() {
 	pf.StringVar(&envPath, "env", ".env", "path to the .env config file")
 	pf.StringVar(&accountName, "account", "", "named account to use (reads IMAP_<NAME>_* vars)")
 	pf.IntVar(&timeoutSecs, "timeout", 30, "connection timeout in seconds")
+	pf.StringVar(&outputFormat, "format", formatJSON, "output `format`: json or toon (toon is more compact for LLMs)")
 
 	rootCmd.AddCommand(foldersCmd, searchCmd, readCmd, attachmentCmd, versionCmd)
 }

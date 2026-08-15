@@ -6,7 +6,7 @@ import (
 	"github.com/emersion/go-imap/v2"
 )
 
-// toAddresses converts go-imap envelope addresses to JSON-friendly ones.
+// toAddresses converts go-imap envelope addresses to serialization-friendly ones.
 func toAddresses(addrs []imap.Address) []Address {
 	out := make([]Address, 0, len(addrs))
 	for _, a := range addrs {

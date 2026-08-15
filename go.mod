@@ -9,6 +9,7 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/ledongthuc/pdf v0.0.0-20250511090121-5959a4027728
 	github.com/spf13/cobra v1.10.2
+	github.com/toon-format/toon-go v0.0.0-20251202084852-7ca0e27c4e8c
 )
 
 require (

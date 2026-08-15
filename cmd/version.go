@@ -11,7 +11,7 @@ var version = "dev"
 
 var versionCmd = &cobra.Command{
 	Use:   "version",
-	Short: "Print the build version as JSON",
+	Short: "Print the build version",
 	Args:  cobra.NoArgs,
 	Run: func(_ *cobra.Command, _ []string) {
 		success(map[string]string{"version": version})

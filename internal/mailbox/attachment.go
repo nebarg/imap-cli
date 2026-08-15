@@ -27,14 +27,14 @@ type AttachmentParams struct {
 // is the decoded byte count — the real file size, which differs from read's
 // encoded_size_bytes for base64-encoded parts.
 type AttachmentResult struct {
-	UID         uint32 `json:"uid"`
-	Index       int    `json:"index"`
-	Filename    string `json:"filename,omitempty"`
-	ContentType string `json:"content_type,omitempty"`
-	SizeBytes   int64  `json:"decoded_size_bytes"`
-	Path        string `json:"path,omitempty"`
-	Base64      string `json:"base64,omitempty"`
-	Text        string `json:"text,omitempty"`
+	UID         uint32 `json:"uid" toon:"uid"`
+	Index       int    `json:"index" toon:"index"`
+	Filename    string `json:"filename,omitempty" toon:"filename,omitempty"`
+	ContentType string `json:"content_type,omitempty" toon:"content_type,omitempty"`
+	SizeBytes   int64  `json:"decoded_size_bytes" toon:"decoded_size_bytes"`
+	Path        string `json:"path,omitempty" toon:"path,omitempty"`
+	Base64      string `json:"base64,omitempty" toon:"base64,omitempty"`
+	Text        string `json:"text,omitempty" toon:"text,omitempty"`
 }
 
 // Attachment fetches a single attachment by UID and index without marking the

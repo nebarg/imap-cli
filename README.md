@@ -1,6 +1,6 @@
 # imap-cli
 
-A small, **read-only** IMAP client that prints results as JSON. Built to be used
+A small, **read-only** IMAP client that prints results as JSON or TOON. Built to be used
 as a tool by LLMs — e.g. "find all emails from a given sender" — but it's a
 perfectly usable CLI on its own.
 
@@ -9,6 +9,9 @@ perfectly usable CLI on its own.
 - **JSON everywhere.** Every invocation prints one JSON object to stdout:
   `{"ok": true, "data": ...}` or `{"ok": false, "error": "..."}`. Diagnostics go
   to stderr; a failed command also exits non-zero.
+- **TOON when tokens matter.** `--format toon` emits the same envelope and the
+  same field names in [TOON](https://github.com/toon-format/toon), a compact
+  indentation-based encoding that's roughly a third smaller than indented JSON.
 - **Server-side search.** Filtering happens on the IMAP server, so it works on
   large mailboxes without downloading everything.
 
@@ -110,7 +113,7 @@ Each result contains: `uid`, `folder`, `from`, `to`, `subject`, `date`
 ./imap-cli read --uid 4213,4214,4220         # comma list, one round-trip
 ```
 
-Returns a JSON array with one entry per requested UID, ordered to match the UIDs
+Returns an array with one entry per requested UID, ordered to match the UIDs
 you asked for. Each entry is `{"uid": N, "found": true, "message": {…}}`; a UID
 with no matching message comes back as `{"uid": N, "found": false}` rather than
 being dropped, so you can always tell which UIDs resolved.
@@ -140,7 +143,7 @@ UIDs come from `search` and are stable within a mailbox, so the usual flow is
 ```sh
 ./imap-cli attachment --uid 4213 --index 1                 # save to a file
 ./imap-cli attachment --uid 4213 --index 1 --out-dir ~/dl  # choose the directory
-./imap-cli attachment --uid 4213 --index 1 --base64        # inline base64 in JSON
+./imap-cli attachment --uid 4213 --index 1 --base64        # inline base64 in the response
 ./imap-cli attachment --uid 4213 --index 1 --as-text       # extract readable text
 ```
 
@@ -173,10 +176,40 @@ part size — for base64 attachments the encoded size is ~33% larger.
 - `--account <name>` — use a named account. Set `IMAP_<NAME>_HOST`, etc. in
   `.env`; any unset value falls back to the default `IMAP_*` vars. Single-account
   setups can ignore this.
+- `--format <json|toon>` — output encoding (default `json`).
+
+## Output format
+
+Every command emits the same envelope and the same field names in either
+format; only the encoding differs. `--format toon` trades JSON's punctuation for
+indentation and array headers, which cuts output size by roughly a third:
+
+```
+ok: true
+data[2]:
+  - uid: 4213
+    folder: INBOX
+    from[1]{name,email}:
+      Alice Smith,alice@example.com
+    subject: Your order #12345 has shipped
+    date: "2026-08-01T10:04:05Z"
+    flags[1]: "\\Seen"
+    seen: true
+    size_bytes: 24193
+  - uid: 4214
+    ...
+```
+
+`[N]` is the array length and `{a,b}` a tabular header: uniform objects made
+only of scalars (attachment lists, addresses) collapse to one comma-separated
+row each. Objects containing nested arrays — messages, folders — stay in the
+indented form. JSON remains the default since it's what most tooling expects;
+reach for TOON when the output is going into an LLM's context.
 
 ## Notes for LLM/tool use
 
 - Parse stdout as JSON; check the top-level `ok` field. On `ok: false`, read
-  `error`. The process also exits non-zero on failure.
+  `error`. The process also exits non-zero on failure. With `--format toon` the
+  envelope and field names are identical, so `ok` / `data` / `error` still apply.
 - Prefer `search` first (cheap, returns headers), then `read` a specific UID for
   full content. Keep `--limit` modest to bound output size.

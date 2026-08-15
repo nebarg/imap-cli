@@ -3,26 +3,55 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"time"
+
+	toon "github.com/toon-format/toon-go"
 
 	"go-imap-cli/internal/config"
 	"go-imap-cli/internal/mailbox"
 )
 
-// response is the uniform JSON envelope printed to stdout for every command.
+// Output formats accepted by --format.
+const (
+	formatJSON = "json"
+	formatTOON = "toon"
+)
+
+// response is the uniform envelope printed to stdout for every command. The
+// `toon` tags mirror the `json` ones so both formats name and omit fields
+// identically (see TestResponseTagParity).
 type response struct {
-	OK    bool   `json:"ok"`
-	Data  any    `json:"data,omitempty"`
-	Error string `json:"error,omitempty"`
+	OK    bool   `json:"ok" toon:"ok"`
+	Data  any    `json:"data,omitempty" toon:"data,omitempty"`
+	Error string `json:"error,omitempty" toon:"error,omitempty"`
 }
 
-// emit writes a JSON response to stdout.
+// encodeResponse renders r in the named format. An unknown format is an error
+// rather than a silent fallback, so a typo can't quietly change the output.
+func encodeResponse(w io.Writer, format string, r response) error {
+	switch format {
+	case formatTOON:
+		out, err := toon.MarshalString(r)
+		if err != nil {
+			return err
+		}
+		_, err = fmt.Fprintln(w, out)
+		return err
+	case formatJSON:
+		enc := json.NewEncoder(w)
+		enc.SetIndent("", "  ")
+		enc.SetEscapeHTML(false)
+		return enc.Encode(r)
+	default:
+		return fmt.Errorf("unknown --format %q (want %s or %s)", format, formatJSON, formatTOON)
+	}
+}
+
+// emit writes a response to stdout in the selected format.
 func emit(r response) {
-	enc := json.NewEncoder(os.Stdout)
-	enc.SetIndent("", "  ")
-	enc.SetEscapeHTML(false)
-	if err := enc.Encode(r); err != nil {
+	if err := encodeResponse(os.Stdout, outputFormat, r); err != nil {
 		fmt.Fprintf(os.Stderr, "failed to encode response: %v\n", err)
 	}
 }
