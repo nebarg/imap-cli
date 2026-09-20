@@ -213,3 +213,7 @@ reach for TOON when the output is going into an LLM's context.
   envelope and field names are identical, so `ok` / `data` / `error` still apply.
 - Prefer `search` first (cheap, returns headers), then `read` a specific UID for
   full content. Keep `--limit` modest to bound output size.
+
+## License
+
+[MIT](LICENSE)
