@@ -8,12 +8,6 @@ on:
 permissions:
   contents: write
 
-env:
-  # Run the JavaScript-based actions on Node.js 24. Node 20 is deprecated;
-  # the runner default flips on 2026-06-16, so opt in early to silence the
-  # warning. Remove once all actions ship Node 24 support by default.
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
-
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -25,11 +19,11 @@ jobs:
           - { goos: linux,  goarch: amd64 }
           - { goos: linux,  goarch: arm64 }
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
-          go-version: "1.26"
+          go-version-file: go.mod
 
       - name: Build
         env:
@@ -44,6 +38,6 @@ jobs:
           tar -czf "$out.tar.gz" "$out"
 
       - name: Upload to release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: imap-cli-*.tar.gz
