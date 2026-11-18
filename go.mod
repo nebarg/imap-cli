@@ -3,7 +3,7 @@ module go-imap-cli
 go 1.26.0
 
 require (
-	github.com/emersion/go-imap/v2 v2.0.0-beta.8
+	github.com/emersion/go-imap/v2 v2.0.0-beta.9
 	github.com/emersion/go-message v0.18.2
 	github.com/jaytaylor/html2text v0.0.0-20260303211410-1a4bdc82ecec
 	github.com/joho/godotenv v1.5.1
